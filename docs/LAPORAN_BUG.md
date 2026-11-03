@@ -30,3 +30,13 @@ sesudahnya.
 memverifikasinya?
 
 ---
+
+## Bug 1: Normalisasi Keyword Huruf Kecil dan Campuran di Lexer
+
+**Ditemukan oleh:** Gharin Fawwaz  **Diperbaiki oleh:** Gharin Fawwaz
+
+**Gejala:** Input SQL berupa keyword dengan huruf kecil atau campuran (seperti `select`, `Select`, `fRoM`) menghasilkan token `KEYWORD` dengan atribut `value` berupa teks aslinya, bukan dinormalisasi menjadi uppercase (`SELECT`, `FROM`). Hal ini menyebabkan parser gagal mengenali keyword tersebut. Berdasarkan `SPESIFIKASI.md` bagian 2.2, keyword bersifat case-insensitive dan nilainya wajib dinormalisasi ke huruf besar.
+
+**Reproduksi minimal:**
+```sql
+Select x fRoM t
