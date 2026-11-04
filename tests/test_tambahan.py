@@ -11,6 +11,8 @@ import pytest
 from crud.analyzer import analyze_statement
 from crud.lexer import LexError, TokenType as T, tokenize
 from crud.parser import parse_sql
+from crud.resolver import Resolver
+from crud import ast_nodes as ast
 
 
 def test_regresi_keyword_campuran_huruf():
@@ -54,3 +56,14 @@ def test_regresi_crud_insert_into_select():
     assert len(script.statements) == 1
     usage = analyze_statement(script.statements[0])
     assert usage == {"arsip": {"C"}, "pesanan": {"R"}}
+
+
+def _resolve(sql):
+    script = parse_sql(sql)
+    diags = Resolver().resolve_script(script)
+    cols = [n for n in ast.iter_nodes(script) if isinstance(n, ast.ColumnRef)]
+    return cols, diags
+
+
+def test_kolom_tanpa_qualifier_dua_tabel_ambigu():
+    cols, diags = _resolve("SELECT nama FROM pelanggan p, pesanan o")
