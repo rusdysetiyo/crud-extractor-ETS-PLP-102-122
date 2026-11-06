@@ -11,6 +11,8 @@ import pytest
 from crud.analyzer import analyze_statement
 from crud.lexer import LexError, TokenType as T, tokenize
 from crud.parser import parse_sql
+from crud.resolver import Resolver
+from crud import ast_nodes as ast
 
 
 def test_regresi_keyword_campuran_huruf():
@@ -54,3 +56,29 @@ def test_regresi_crud_insert_into_select():
     assert len(script.statements) == 1
     usage = analyze_statement(script.statements[0])
     assert usage == {"arsip": {"C"}, "pesanan": {"R"}}
+
+
+def _resolve(sql):
+    script = parse_sql(sql)
+    diags = Resolver().resolve_script(script)
+    cols = [n for n in ast.iter_nodes(script) if isinstance(n, ast.ColumnRef)]
+    return cols, diags
+
+def test_kolom_tanpa_qualifier_satu_tabel_tambahan():
+    cols, diags = _resolve("SELECT nama FROM pelanggan")
+    assert cols[0].resolved == "pelanggan"
+
+def test_kolom_tanpa_qualifier_scope_luar_tidak_terlihat():
+    # Kolom 'x' di subquery tidak boleh melihat tabel 'pelanggan' dari scope luar
+    cols, diags = _resolve("SELECT (SELECT x) FROM pelanggan")
+    assert cols[0].resolved is None
+
+
+def test_kolom_tanpa_qualifier_dua_tabel_ambigu():
+    cols, diags = _resolve("SELECT nama FROM pelanggan p, pesanan o")
+    # 1. Pastikan resolved dari kolom tetap None (karena ambigu)
+    assert cols[0].resolved is None
+    # 2. Pastikan muncul warning bahwa kolom ambigu tanpa skema
+    assert len(diags) == 1
+    assert diags[0].level == "warning"
+    assert "ambigu tanpa skema" in diags[0].message
