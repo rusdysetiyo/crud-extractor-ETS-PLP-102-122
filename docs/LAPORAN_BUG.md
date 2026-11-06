@@ -55,3 +55,20 @@ test_regresi_keyword_campuran_huruf: gagal sebelum perbaikan (token IDENT), lulu
 test_kata_berawalan_keyword_tetap_ident: lulus sebelum dan sesudah. berfungsinya sebagai penjaga supaya perbaikan tidak berlebihan.
 
 **Peran AI.** ya AI sangat membantuku menemukan bug ini, AI menujukan lokasi peyebab dan kode perbaikan, selain itu saya juga meminta AI untuk menjelaskan code dan juga akar masalah yang dasar teorinya kurang saya pahami, saya memverifikasinya hasilnya menggunakan pytest, pengecekan manual dengan python -c, dan membandingkan dengan spesifikasi 2.2.
+
+### Bug 2: Resolusi Kolom Tanpa Qualifier Belum Diimplementasikan (TODO 2)
+
+**Ditemukan oleh:** Gharin Fawwaz  **Diperbaiki oleh:** Gharin Fawwaz
+
+**Gejala:** Ketika terdapat kolom tanpa qualifier pada scope yang memiliki lebih dari satu tabel, sistem gagal mendeteksi keambiguan tersebut. Output yang didapat: atribut resolved dibiarkan kosong dan tidak ada peringatan apa pun. Output yang diharapkan menurut SPESIFIKASI.md 4.3: sistem harus mengeluarkan warning
+
+**Reproduksi minimal:**
+SELECT nama FROM pelanggan p, pesanan o
+
+**Akar masalah.**Dalam buku Crafting Interpreters Bab 11: Resolving and Binding, sebuah resolver bertanggung jawab untuk mengikat  setiap variabel ke deklarasinya secara leksikal. Kode lama hanya menggunakan blok pass dan gagal menelusuri environment (scope) untuk melakukan binding statis pada kolom tersebut, sehingga interpreter kehilangan jejak asal usul kolom.
+
+**Perbaikan.**File yang diubah adalah crud/resolver.py pada fungsi _column. Perbaikan dilakukan dengan mengekstrak nilai dari self.scope.entries dan mengecek jumlah tabelnya. Jika tepat 1, resolve ke tabel tersebut; jika > 1, keluarkan warning ambigu; jika 0, keluarkan warning tidak ada tabel. Alternatif yang dipertimbangkan adalah membiarkan program menebak salah satu tabel secara acak saat ambigu, namun ditolak karena dapat menyebabkan silent error yang berbahaya pada matriks tabel.
+
+**Test regresi.** test_kolom_tanpa_qualifier_dua_tabel_ambigu
+
+**Peran AI.**ya, AI membantu merumuskan logika percabangan untuk pengecekan entri pada scope serta menyusun fungsi pengujian.
