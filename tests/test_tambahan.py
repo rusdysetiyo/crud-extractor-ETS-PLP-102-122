@@ -70,7 +70,7 @@ def test_kolom_tanpa_qualifier_satu_tabel_tambahan():
 
 def test_kolom_tanpa_qualifier_scope_luar_tidak_terlihat():
     # Kolom 'x' di subquery tidak boleh melihat tabel 'pelanggan' dari scope luar
-    cols, diags = _resolve("SELECT (SELECT x) FROM pelanggan")
+    cols, diags = _resolve("SELECT (SELECT x FROM a, b) FROM pelanggan")
     assert cols[0].resolved is None
 
 
@@ -82,3 +82,48 @@ def test_kolom_tanpa_qualifier_dua_tabel_ambigu():
     assert len(diags) == 1
     assert diags[0].level == "warning"
     assert "ambigu tanpa skema" in diags[0].message
+
+def test_regresi_update_subquery_selalu_read():
+    # SPESIFIKASI bagian 5:
+    # "Membaca tabel lewat subquery selalu R, apa pun jenis statement luarnya."
+    # Pada UPDATE, tabel target bernilai 'U', tetapi tabel di dalam subquery
+    # (baik pada klausa SET maupun WHERE) wajib bernilai 'R'.
+    sql = """
+    UPDATE pelanggan
+    SET skor = (SELECT skor_awal FROM profil WHERE id = pelanggan.id)
+    WHERE id IN (SELECT pelanggan_id FROM pesanan);
+    """
+    script = parse_sql(sql)
+    assert script.errors == [], script.errors
+    assert len(script.statements) == 1
+    usage = analyze_statement(script.statements[0])
+    assert usage == {"pelanggan": {"U"}, "pesanan": {"R"}, "profil": {"R"}}
+
+
+def test_regresi_operator_tidak_sama_dengan():
+    # SPESIFIKASI 2.5: Operator maximal munch.
+    # '<>' harus dibaca sebagai satu kesatuan token OP, bukan terpisah '<' lalu '>'.
+    toks = tokenize("a <> b")
+    assert toks[1].type == T.OP
+    assert toks[1].value == "<>"
+
+
+def test_regresi_scope_delete_tidak_bocor():
+    # SPESIFIKASI 4.5: Setiap statement berdiri sendiri.
+    # Setelah DELETE selesai di-resolve, scope harus bersih (None),
+    # dan alias dari DELETE tidak boleh terlihat oleh statement berikutnya.
+    sql = """
+    DELETE FROM pelanggan p WHERE p.id = 1;
+    SELECT p.nama FROM pesanan o;
+    """
+    script = parse_sql(sql)
+    resolver = Resolver()
+    diags = resolver.resolve_script(script)
+
+    # 1. Pastikan tidak ada scope yang tersisa setelah resolusi
+    assert resolver.scope is None
+
+    # 2. Statement kedua harus error karena alias 'p' milik statement DELETE sebelumnya
+    assert len(diags) == 1
+    assert diags[0].level == "error"
+    assert "alias 'p' tidak terdefinisi" in diags[0].message
