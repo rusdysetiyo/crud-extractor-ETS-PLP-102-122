@@ -105,7 +105,7 @@ serta melempar `LexError("komentar blok tidak ditutup", line, col)` jika mencapa
 - `test_komentar_blok` (di `tests/test_lexer.py`)
 - `test_kasus_tepi_komentar_blok_berisi_bintang`
 
-**Peran AI.** (Isikan peran AI di sini)
+**Peran AI.**  Membantu membuatkan test dengan skenario yang ditentukan
 
 ---
 
@@ -133,7 +133,7 @@ Kode lama pada fungsi `_insert` di `crud/parser.py` hanya mengimplementasikan ca
 - `test_regresi_crud_insert_into_select`
 - `test_insert_select` (di `tests/test_parser.py`)
 
-**Peran AI.** (Isikan peran AI di sini)
+**Peran AI.**  Membantu membuatkan test secara keseluruhan
 
 ---
 
@@ -158,7 +158,7 @@ Pada fungsi `_scan_token` di `crud/lexer.py`, saat karakter `<` ditemukan, kode 
 **Test regresi.**
 - `test_regresi_operator_tidak_sama_dengan` (di `tests/test_tambahan.py`)
 
-**Peran AI.**
+**Peran AI.** 
 
 ---
 
@@ -185,7 +185,7 @@ Fungsi `_collect` bertugas mengumpulkan tabel di dalam subquery dan menandainya 
 **Test regresi.**
 - `test_regresi_update_subquery_selalu_read` (di `tests/test_tambahan.py`)
 
-**Peran AI.** (Isikan peran AI di sini)
+**Peran AI.**  Membantu membuatkan test secara keseluruhhan
 
 ---
 
@@ -212,5 +212,41 @@ Pada file `crud/resolver.py`, fungsi `_delete` memanggil `self._push()` di awal 
 **Test regresi.**
 - `test_regresi_scope_delete_tidak_bocor` (di `tests/test_tambahan.py`)
 
-**Peran AI.**
+**Peran AI.**  Membantu membuatkan test secara keseluruhan
+
+---
+
+## Bug 8: Error Recovery (Panic Mode) di Parser Membuang Seluruh Kode sampai EOF
+
+**Ditemukan oleh:** Rusdya Setiyo Aji · **Diperbaiki oleh:** Rusdya Setiyo Aji
+
+**Gejala.** Ketika file SQL memuat statement yang gagal diparse, seluruh statement yang valid setelah statement gagal tersebut ikut terbuang dan tidak diekstrak ke dalam daftar statement.
+Output yang diharapkan menurut SPESIFIKASI.md bagian 6 (*"Error recovery (panic mode): setelah error, buang token sampai dan termasuk ';' berikutnya, lalu lanjutkan dengan statement setelahnya. Setiap statement rusak menghasilkan tepat satu error, dan statement valid setelahnya tetap diproses."*) adalah statement rusak menghasilkan tepat satu `ParseError`, dan statement valid setelahnya tetap berhasil diproses dan disimpan ke `script.statements`.
+
+**Reproduksi minimal.**
+
+```sql
+SELECT FROM;
+SELECT id FROM pelanggan;
+```
+
+**Akar masalah.** Dalam buku *Crafting Interpreters* Bab 6 bagian 6.3 (*Syntax Errors - Synchronizing a Recursive Descent Parser*), panic mode recovery harus synchronize parser ke batasan statement berikutnya (*synchronization boundary*), yang pada bahasa SQL ditandai oleh titik koma (`;`).
+Pada kode lama di `crud/parser.py`, fungsi `_synchronize()` hanya berupa loop `while not self._at_end(): self._advance()`. Loop ini melakukan skip tanpa henti hingga `EOF`. 
+Akibatnya, alih-alih lanjut ke statement berikutnya, parser membuang semua token yang tersisa, sehingga statement-statement valid berikutnya hilang tanpa diproses.
+
+**Perbaikan.** Pada file `crud/parser.py`, method `_synchronize()` diperbaiki agar berhenti segera setelah menemukan dan mengonsumsi token titik koma (`T.SEMICOLON`):
+```python
+def _synchronize(self) -> None:
+    # Panic mode (SPESIFIKASI.md bagian 6): buang token sampai
+    # dan termasuk ';' berikutnya, lalu lanjutkan dengan statement setelahnya.
+    while not self._at_end():
+        if self._advance().type == T.SEMICOLON:
+            return
+```
+
+**Test regresi.**
+- `test_regresi_panic_mode_error_recovery` (di `tests/test_tambahan.py`)
+
+**Peran AI.** Membantu membuatkan test dengan skenario yang ditentukan
+
 
