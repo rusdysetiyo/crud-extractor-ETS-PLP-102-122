@@ -92,8 +92,11 @@ serta jika tidak ditutup hingga akhir berkas harus melempar `LexError`.
 /* komentar */ SELECT 1;
 ```
 
-**Akar masalah.**  Pada kode lama di `crud/lexer.py`, saat karakter `/*` terdeteksi, program hanya berisi komentar `TODO(T3)` 
-dan langsung melempar `LexError("komentar blok belum didukung", line, col)`, belum memindai isi komentar hingga penutup `*/` seperti yang diharapkan SPESIFIKASI.md bagian 2.3.
+**Akar masalah.** Dalam buku Crafting Interpreters Bab 4 bagian 4.6 (Longer Lexemes) dan bagian 4.5.1 (*Lexical errors*), scanner bertugas mengonsumsi karakter kode dan mengelompokkannya menjadi token. 
+Komentar apapun itu diklasifikasikan sebagai lexeme yang tidak memiliki nilai semantik bagi tahapan parser, sehingga pada kasus ini strategi pemindaiannya adalah mengonsumsi dan membuang seluruh karakter di antara delimiter pembuka (`/*`) dan penutup (`*/`) tanpa mengemisikan token ke parser, sambil tetap memelihara posisi baris/kolom. 
+Selain itu, menurut bagian 4.5.1, jika pemindaian lexeme multi-karakter yang memiliki pembatas berpasangan mencapai akhir berkas (`EOF`) tanpa menemukan delimiter penutup, scanner wajib membangkitkan lexical error (*unterminated lexical structure*).
+Pada kode lama di `crud/lexer.py`, saat karakter `/*` terdeteksi, program hanya berisi komentar `TODO(T3)` dan langsung melempar `LexError("komentar blok belum didukung", line, col)`. 
+Kode tidak menjalankan loop *lookahead* untuk memindai karakter sampai token penutup `*/`. Hal ini melanggar konsep penanganan longer lexemes dan spesifikasi SQL pada SPESIFIKASI.md bagian 2.3.
 
 **Perbaikan.** Pada file `crud/lexer.py`, di fungsi `_scan_token`, baris pelemparan error diganti dengan pemanggilan helper `self._block_comment(line, col)`. 
 Fungsi ini memajukan pembacaan karakter menggunakan `_advance()`, mengabaikan karakter `*` biasa di dalam teks, melewati `*/` saat menemukannya dan berhenti, 
@@ -122,9 +125,12 @@ INSERT INTO arsip (id) SELECT id FROM pesanan;
 ```
 
 **Akar masalah.** 
+Dalam buku Crafting Interpreters Bab 5 bagian 5.1 (*Context-Free Grammars*) dan Bab 6 bagian 6.2 (*Recursive Descent Parsing*), 
+sebuah parser *recursive descent* mengimplementasikan aturan-aturan produksi grammar langsung ke dalam fungsi atau metode kode program. 
+Ketika sebuah aturan produksi grammar memuat percabangan misalnya `( "VALUES" value_row ... | select_stmt )`), parser menggunakan token *lookahead* untuk melakukan *predictive parsing* dan memilih cabang fungsi parser yang sesuai.
 Menurut SPESIFIKASI.md bagian 3, aturan produksi statement `INSERT` memiliki dua cabang alternatif:
 `insert_stmt = "INSERT" "INTO" table_name ... ( "VALUES" value_row ... | select_stmt )`.
-Kode lama pada fungsi `_insert` di `crud/parser.py` hanya mengimplementasikan cabang `VALUES`. Ketika mendeteksi token `SELECT`, kode lama hanya berupa `TODO(T1)` yang langsung melempar `ParseError("INSERT ... SELECT belum didukung")`. Akibatnya, AST tidak pernah terbentuk dan pipeline berhenti sebelum tahap analisis CRUD.
+Kode lama pada fungsi `_insert` di `crud/parser.py` melanggar kelengkapan implementasi tata bahasa ini, parser hanya mengimplementasikan cabang `VALUES`. Ketika mendeteksi token `SELECT`, kode lama hanya berupa `TODO(T1)` yang langsung melempar `ParseError("INSERT ... SELECT belum didukung")` alih-alih mendelegasikan pemrosesan ke method `_select()`. Akibatnya, AST `ast.Insert` tidak pernah terbentuk dan pipeline terhenti sebelum tahap ekstraksi CRUD.
 
 **Perbaikan.** Pada file `crud/parser.py` di dalam method `_insert`, cabang `if self._check_kw("SELECT"):` diperbaiki dengan memanggil `query = self._select()` untuk mem-parse subquery tersebut, lalu mengembalikan objek `ast.Insert(table, columns, values=[], query=query, line=start.line)`.  
 
@@ -151,9 +157,11 @@ SELECT id FROM t WHERE x <> 1;
 ```
 
 **Akar masalah.** 
-Pada fungsi `_scan_token` di `crud/lexer.py`, saat karakter `<` ditemukan, kode hanya mengecek apakah karakter berikutnya adalah `=` menggunakan `self._match("=")` untuk membentuk token `<=`. Kode belum memeriksa kemungkinan karakter `>`, sehingga ketika karakter berikutnya adalah `>`, lexer menganggap `<` telah selesai sebagai satu token `OP`, lalu di iterasi berikutnya membaca `>` sebagai token `OP` terpisah. Akibatnya, parser menerima dua token operator perbandingan berturut-turut (`<` lalu `>`) yang mana tidak sesuai SPESIFIKASI.md
+Dalam buku Crafting Interpreters Bab 4 bagian 4.5.2 (*Operators*) dan bagian 4.7 (*Maximal Munch*), operator multi-karakter (seperti `!=`, `<=`, `>=`, atau `<>`) memerlukan teknik *lookahead* dua karakter menggunakan kondisional seperti `match()`.
+Prinsip dasar *maximal munch* (aturan *longest match*) menyatakan bahwa ketika dua atau lebih aturan leksikal dapat mencocokkan deretan karakter input, pemindai wajib memilih aturan yang mengonsumsi karakter terbanyak. Pada SQL standar dan SPESIFIKASI.md bagian 2.5, deretan karakter `<>` adalah satu lexeme tunggal bernilai `"<>"`, bukan dua operator terpisah.
+Pada fungsi `_scan_token` di `crud/lexer.py`, saat karakter `<` ditemukan, kode hanya mengecek apakah karakter berikutnya adalah `=` menggunakan `self._match("=")` untuk membentuk token `<=`. Kode belum memeriksa kemungkinan karakter `>`. Akibat melanggar prinsip *maximal munch* dan *lookahead* ini, lexer menganggap `<` telah selesai sebagai token `OP` tunggal, lalu di iterasi berikutnya membaca `>` sebagai token `OP` tersendiri. Akibatnya, parser menerima dua token operator perbandingan berturut-turut (`<` lalu `>`), yang tidak valid secara sintaksis dan memicu `ParseError`.
 
-**Perbaikan.**Pada file crud/lexer.py di dalam fungsi _scan_token(), perbaikan dilakukan dengan menambahkan kondisi elif self._match(">"): di dalam blok percabangan untuk karakter <. Di dalam blok tersebut, variabel op diatur menjadi "<>". Perubahan ini membuat lexer mampu memeriksa dan menangkap karakter > tepat setelah <, menjadikannya satu token OP yang utuh sehingga tidak terpecah menjadi dua token terpisah.
+**Perbaikan.** Pada file crud/lexer.py di dalam fungsi _scan_token(), perbaikan dilakukan dengan menambahkan kondisi elif self._match(">"): di dalam blok percabangan untuk karakter <. Di dalam blok tersebut, variabel op diatur menjadi "<>". Perubahan ini membuat lexer mampu memeriksa dan menangkap karakter > tepat setelah <, menjadikannya satu token OP yang utuh sehingga tidak terpecah menjadi dua token terpisah.
 
 **Test regresi.**
 - `test_regresi_operator_tidak_sama_dengan` (di `tests/test_tambahan.py`)
@@ -176,11 +184,15 @@ UPDATE pelanggan SET level = 'gold' WHERE id IN (SELECT pelanggan_id FROM pesana
 ```
 
 **Akar masalah.**
-Pada fungsi `analyze_statement` di `crud/analyzer.py`, penanganan `ast.Update` memanggil helper `_collect` untuk ekspresi nilai `SET` dan kondisi `WHERE` dengan mengoper parameter operasi `"U"`:
+Dalam buku Crafting Interpreters Bab 7 (*Evaluating Expressions*, bagian 7.2) dan Bab 8 (*Statements and State*, bagian 8.1), 
+terdapat pemisahan antara statement dan expression. Statement berfungsi menghasilkan efek samping (perubahan state atau data), 
+sedangkan expression untuk memproduksi nilai data tanpa mengubah state dari entitas luar. 
+Saat melakukan penelusuran AST, nested expression seperti subquery pada predikat `WHERE` atau ekspresi nilai pada klausa `SET` hanya berperan mengevaluasi dan membaca data.
+Pada fungsi `analyze_statement` di `crud/analyzer.py`, penanganan node `ast.Update` memanggil fungsi pembantu `_collect` untuk ekspresi nilai `SET` dan kondisi `WHERE` dengan meneruskan parameter operasi `"U"`:
 `_collect(assignment.value, usage, "U")` dan `_collect(stmt.where, usage, "U")`.
 Fungsi `_collect` bertugas mengumpulkan tabel di dalam subquery dan menandainya dengan operasi yang dioperkan. Karena dioperkan `"U"`, tabel-tabel di dalam subquery yang read-only keliru ditandai sebagai termodifikasi (`"U"`).
 
-**Perbaikan.**Pada file crud/analyzer.py di dalam fungsi analyze_statement(), parameter operasi yang dilewatkan ke fungsi pembantu _collect diubah. Untuk penanganan percabangan ast.Update, pemanggilan fungsi untuk assignment.value maupun stmt.where yang semula dioper dengan "U" telah diganti menjadi "R". Perubahan ini memastikan bahwa semua tabel yang dibaca dari subquery pada statement UPDATE dianalisis dengan tepat sebagai operasi baca atau R.
+**Perbaikan.** Pada file crud/analyzer.py di dalam fungsi analyze_statement(), parameter operasi yang dilewatkan ke fungsi pembantu _collect diubah. Untuk penanganan percabangan ast.Update, pemanggilan fungsi untuk assignment.value maupun stmt.where yang semula dioper dengan "U" telah diganti menjadi "R". Perubahan ini memastikan bahwa semua tabel yang dibaca dari subquery pada statement UPDATE dianalisis dengan tepat sebagai operasi baca atau R.
 
 **Test regresi.**
 - `test_regresi_update_subquery_selalu_read` (di `tests/test_tambahan.py`)
@@ -204,7 +216,11 @@ SELECT p.nama FROM pesanan o;
 ```
 
 **Akar masalah.**
+Dalam buku Crafting Interpreters Bab 8 bagian 8.5 serta Bab 11 bagian 11.3.1 (*Resolving blocks*), pengelolaan scope variabel diatur menggunakan scope stack. 
+Ketika memasuki unit eksekusi/blok/statement baru, resolver harus membuat dan menaruh scope lokal baru di atas stack (`beginScope()` atau `_push()`). 
+Selanjutnya, saat pemrosesan blok atau statement tersebut selesai dieksekusi, scope tersebut **wajib** dikeluarkan dari tumpukan (`endScope()` atau `_pop()`) untuk membatasi lifetime binding nama-nama lokal di dalamnya.
 Pada file `crud/resolver.py`, fungsi `_delete` memanggil `self._push()` di awal untuk mendaftarkan tabel dan alias target `DELETE`, namun tidak memanggil `self._pop()` di akhir fungsi. 
+Pelanggaran terhadap scope stack ini mengakibatkan kebocoran scope, scope lokal dari statement `DELETE` tetap tertinggal di `resolver.scope` dan memengaruhi statement-statement SQL berikutnya, sehingga alias dan tabel privat milik statement sebelumnya tidak terisolasi dan melanggar prinsip isolasi statement pada SPESIFIKASI.md bagian 4.5.
 
 
 **Perbaikan.**Pada file crud/resolver.py, perbaikan dilakukan dengan menambahkan satu baris kode pemanggilan metode self._pop() di akhir fungsi _delete(). Perbaikan ini akan memastikan scope atau lingkungan yang dibuat pada saat pembacaan statement DELETE lewat self._push() dihapus saat statement tersebut selesai di-resolve, mencegah kebocoran scope ke statement SQL selanjutnya.
@@ -230,9 +246,13 @@ SELECT FROM;
 SELECT id FROM pelanggan;
 ```
 
-**Akar masalah.** Dalam buku *Crafting Interpreters* Bab 6 bagian 6.3 (*Syntax Errors - Synchronizing a Recursive Descent Parser*), panic mode recovery harus synchronize parser ke batasan statement berikutnya (*synchronization boundary*), yang pada bahasa SQL ditandai oleh titik koma (`;`).
-Pada kode lama di `crud/parser.py`, fungsi `_synchronize()` hanya berupa loop `while not self._at_end(): self._advance()`. Loop ini melakukan skip tanpa henti hingga `EOF`. 
-Akibatnya, alih-alih lanjut ke statement berikutnya, parser membuang semua token yang tersisa, sehingga statement-statement valid berikutnya hilang tanpa diproses.
+**Akar masalah.** Dalam buku Crafting Interpreters Bab 6 bagian 6.3 (*Syntax Errors*, khususnya 6.3.1 *Panic mode error recovery* dan 6.3.3 *Synchronizing a recursive descent parser*), 
+teknik recovery error panic mode bekerja dengan membawa parser keluar dari tumpukan produksi aturan yang mengalami kegagalan, 
+kemudian melakukan synchronization pada aliran token hingga menemukan batas pemisah statement (*synchronization boundary*). 
+Dalam bahasa seperti SQL, titik koma (`;`) berperan sebagai pembatas akhir statement yang jelas. Dengan menyinkronkan pembacaan token hingga batas titik koma, parser dapat meredam kesalahan beruntun dan melanjutkan parsing pada statement berikutnya
+Pada kode lama di `crud/parser.py`, fungsi `_synchronize()` hanya berupa loop `while not self._at_end(): self._advance()`. 
+Loop ini membuang seluruh token tanpa henti hingga mencapai akhir berkas (`EOF`). 
+Hal ini melanggar konsep synchronization pada *panic mode recovery*, alih-alih melompat ke pembatas statement berikutnya (`;`) agar parsing dapat dipulihkan, parser justru membuang semua statement valid yang berada di belakang statement yang rusak.
 
 **Perbaikan.** Pada file `crud/parser.py`, method `_synchronize()` diperbaiki agar berhenti segera setelah menemukan dan mengonsumsi token titik koma (`T.SEMICOLON`):
 ```python
@@ -265,15 +285,17 @@ SELECT id FROM t WHERE a = 1 OR b = 2 AND c = 3;
 ```
 
 **Akar masalah.**
-Pada fungsi `_logical` di `crud/parser.py`, parser menggabungkan pengecekan `AND` dan `OR` ke dalam satu perulangan `while self._check_kw("AND", "OR"):` yang sama. Akibatnya, kedua operator diperlakukan memiliki tingkatan presedensi yang sama secara asosiatif kiri (*flat precedence*), menyalahi aturan grammar pada SPESIFIKASI.md bagian 3 (`or_expr = and_expr { "OR" and_expr }` dan `and_expr = not_expr { "AND" not_expr }`).
+Dalam buku Crafting Interpreters Bab 6 bagian 6.1 (subbab *Precedence and Associativity*) dan Bab 9 bagian 9.3 (*Logical Operators*), 
+context-free grammar harus distratifikasi untuk menyelesaikan ambiguitas urutan evaluasi operator dan menegakkan presedensi operator secara hierarkis. 
+Dalam teknik *stratified grammar*, setiap tingkatan presedensi diwakili oleh aturan produksi tata bahasa yang berbeda, 
+aturan dengan presedensi lebih rendah (seperti `logic_or`) harus memanggil aturan dengan presedensi lebih tinggi (seperti `logic_and`), 
+yang kemudian memanggil aturan di atasnya lagi (`equality` / perbandingan). Dengan struktur ini, operator dengan presedensi lebih tinggi akan mengikat lebih kuat dan menempati simpul yang lebih dalam pada ast.
+Pada fungsi `_logical` di `crud/parser.py`, parser menggabungkan pengecekan `AND` dan `OR` ke dalam satu perulangan tunggal `while self._check_kw("AND", "OR"):`. Hal ini melanggar konsep *stratified grammar* dan memberlakukan presedensi datar (*flat precedence*) berasosiatif kiri pada kedua operator. Akibatnya, ekspresi seperti `a = 1 OR b = 2 AND c = 3` secara keliru dikelompokkan menjadi `(a = 1 OR b = 2) AND c = 3`, menyalahi aturan grammar berjenjang pada SPESIFIKASI.md bagian 3 (`or_expr = and_expr { "OR" and_expr }` dan `and_expr = not_expr { "AND" not_expr }`).
 
-**Perbaikan.**Pada `crud/parser.py`, fungsi `_logical` dihapus dan diganti dua fungsi berjenjang, `_or_expr` dan `_and_expr`. `_expr` memanggil `_or_expr`; `_or_expr` memanggil `_and_expr` dan mengulang selama menemukan `OR`; `_and_expr` memanggil `_not` dan mengulang selama menemukan `AND`; `_not` kemudian memanggil `_comparison`. Dengan begitu `AND` diikat lebih dulu (lebih dalam di pohon) sebelum `OR` mengikat hasilnya di lapisan luar, dan keduanya tetap asosiatif kiri. Alternatif yang dipertimbangkan: (a) satu fungsi dengan tabel presedensi (*precedence climbing*), ditolak karena grammar spesifikasi sudah disusun per tingkat dan fungsi lain di file ini juga mengikuti pola satu fungsi per tingkat; (b) mempertahankan satu fungsi `_logical` lalu menyusun ulang pohon sesudahnya, ditolak karena rapuh dan tidak mengikuti grammar.
+**Perbaikan.** Pada `crud/parser.py`, fungsi `_logical` dihapus dan diganti dua fungsi berjenjang, `_or_expr` dan `_and_expr`. `_expr` memanggil `_or_expr`; `_or_expr` memanggil `_and_expr` dan mengulang selama menemukan `OR`; `_and_expr` memanggil `_not` dan mengulang selama menemukan `AND`; `_not` kemudian memanggil `_comparison`. Dengan begitu `AND` diikat lebih dulu (lebih dalam di pohon) sebelum `OR` mengikat hasilnya di lapisan luar, dan keduanya tetap asosiatif kiri. Alternatif yang dipertimbangkan: (a) satu fungsi dengan tabel presedensi (*precedence climbing*), ditolak karena grammar spesifikasi sudah disusun per tingkat dan fungsi lain di file ini juga mengikuti pola satu fungsi per tingkat; (b) mempertahankan satu fungsi `_logical` lalu menyusun ulang pohon sesudahnya, ditolak karena rapuh dan tidak mengikuti grammar.
 
 **Test regresi.**
 - `test_regresi_presedensi_and_lebih_tinggi_dari_or` (di `tests/test_tambahan.py`)
 - `test_kasus_tepi_presedensi_between_and_dengan_or` (di `tests/test_tambahan.py`)
 
 **Peran AI.** Membantu membuatkan test dengan skenario yang ditentukan dan membantu memperbaiki bug.
-
-
-
