@@ -139,6 +139,7 @@ Siapa mengerjakan apa, dan bagaimana kalian memastikan keduanya memahami seluruh
   - **Bug 5 (Lexer):** Memperbaiki operator perbandingan `<>` di `crud/lexer.py` agar diproses sebagai satu kesatuan token `OP`
   - **Bug 6 (Analyzer):** Memperbaiki penandaan operasi tabel pada subquery di klausa `SET` dan `WHERE` statement `UPDATE` di `crud/analyzer.py` agar bertipe `'R'`.
   - **Bug 7 (Resolver):** Memperbaiki siklus hidup scope statement `DELETE` di `crud/resolver.py` dengan menambahkan `self._pop()` agar tidak bocor ke statement berikutnya.
+  - **Bug 9 (Parser):** Memperbaiki presedensi operator logika `AND` dan `OR` di `crud/parser.py` dengan memecah `_logical` menjadi `_or_expr` dan `_and_expr` agar `AND` terikat lebih kuat daripada `OR` (`a = 1 OR b = 2 AND c = 3` kini terbaca `a = 1 OR (b = 2 AND c = 3)`).
 
 * **Rusdya Setiyo Aji**:
   - **Bug 3 / TODO 3 (Lexer):** Mengimplementasikan dukungan komentar blok `/* ... */` (lintas baris, memuat karakter `*`, dan penanganan `LexError` jika tidak ditutup) di `crud/lexer.py`.
