@@ -130,3 +130,30 @@ dan informasi apa yang dibutuhkan untuk mengatasinya.
 ## 4. Pembagian kerja
 
 Siapa mengerjakan apa, dan bagaimana kalian memastikan keduanya memahami seluruh kode.
+
+### Rincian Pembagian Kerja:
+
+* **Gharin Fawwaz**:
+  - **Bug 1 (Lexer):** Menemukan dan memperbaiki masalah normalisasi keyword case-insensitive di `crud/lexer.py`
+  - **Bug 2 / TODO 2 (Resolver):** Menemukan dan mengimplementasikan resolusi kolom tanpa qualifier untuk scope tunggal serta deteksi warning ambiguitas untuk scope jamak di `crud/resolver.py`.
+  - **Bug 5 (Lexer):** Memperbaiki operator perbandingan `<>` di `crud/lexer.py` agar diproses sebagai satu kesatuan token `OP`
+  - **Bug 6 (Analyzer):** Memperbaiki penandaan operasi tabel pada subquery di klausa `SET` dan `WHERE` statement `UPDATE` di `crud/analyzer.py` agar bertipe `'R'`.
+  - **Bug 7 (Resolver):** Memperbaiki siklus hidup scope statement `DELETE` di `crud/resolver.py` dengan menambahkan `self._pop()` agar tidak bocor ke statement berikutnya.
+
+* **Rusdya Setiyo Aji**:
+  - **Bug 3 / TODO 3 (Lexer):** Mengimplementasikan dukungan komentar blok `/* ... */` (lintas baris, memuat karakter `*`, dan penanganan `LexError` jika tidak ditutup) di `crud/lexer.py`.
+  - **Bug 4 / TODO 1 (Parser):** Mengimplementasikan dukungan parsing sintaks `INSERT INTO ... SELECT` di `crud/parser.py`.
+  - **Bug 8 (Parser):** Menemukan dan memperbaiki mekanisme error recovery (*panic mode*) pada `_synchronize()` di `crud/parser.py` agar berhenti di batasan statement (`;`) dan tidak membuang statement valid berikutnya.
+  - **Pengujian & Ground Truth:** Menemukan akar masalah serta menyusun unit test regresi dan kasus tepi di `tests/test_tambahan.py` (untuk Bug 3, 4, 5, 6, 7, dan 8), serta melengkapi data evaluasi manual di `data/ground_truth.csv` untuk berkas `audit.sql` dan `pemeliharaan.sql`.
+
+---
+
+### Cara Memastikan Keduanya Memahami Seluruh Kode:
+
+Kami menerapkan pembagian peran berbasis TDD dan peer code reviw: salah satu anggota bertugas menganalisis spesifikasi, mereproduksi bug, dan menulis test regresi yang awalnya berstatus gagal (*Red*), sementara anggota lainnya membedah kode sumber, 
+menerapkan logika perbaikan hingga test lulus (*Green*), lalu keduanya memverifikasi bersama dengan `pytest`.
+Yang menemukan bug dan menambahkan unit test menjelaskan gejala dan akar masalahnya dan spesifikasi mana yang dilanggar,
+Yang memperbaiki menjelaskan cara dan alur perbaikannya
+Walau mungkin ada beberapa yang melakukan keduanya sekaligus.
+
+
