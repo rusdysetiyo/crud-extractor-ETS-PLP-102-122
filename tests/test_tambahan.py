@@ -127,3 +127,21 @@ def test_regresi_scope_delete_tidak_bocor():
     assert len(diags) == 1
     assert diags[0].level == "error"
     assert "alias 'p' tidak terdefinisi" in diags[0].message
+
+
+def test_regresi_panic_mode_error_recovery():
+    # SPESIFIKASI bagian 6: Error recovery (panic mode).
+    # Setelah error sintaks, parser harus membuang token sampai ';' berikutnya,
+    # dan statement valid setelahnya tetap harus berhasil diproses.
+    sql = """
+    SELECT FROM;
+    SELECT id FROM pelanggan;
+    """
+    script = parse_sql(sql)
+
+    # 1. Statement rusak menghasilkan tepat satu ParseError
+    assert len(script.errors) == 1
+
+    # 2. Statement valid setelahnya tetap diproses (tidak boleh terbuang)
+    assert len(script.statements) == 1
+    assert script.statements[0].sources[0].name == "pelanggan"
