@@ -9,16 +9,10 @@ Tempel keluaran `python evaluate.py` setelah `data/ground_truth.csv` dilengkapi.
 Dievaluasi: audit.sql, campuran_error.sql, laporan_penjualan.sql, pemeliharaan.sql (27 triple)
 
 Metode   Precision  Recall     F1
-parser        0.91    0.74   0.82
+parser        1.00    0.89   0.94
 regex         0.65    0.81   0.72
 
 [parser]
-  salah ditemukan (FP): ('audit.sql', 20, 'pelanggan', 'U')
-  salah ditemukan (FP): ('laporan_penjualan.sql', 12, 'pesanan', 'U')
-  terlewat (FN):       ('audit.sql', 20, 'pelanggan', 'R')
-  terlewat (FN):       ('laporan_penjualan.sql', 3, 'pelanggan', 'R')
-  terlewat (FN):       ('laporan_penjualan.sql', 3, 'pesanan', 'R')
-  terlewat (FN):       ('laporan_penjualan.sql', 12, 'pesanan', 'R')
   terlewat (FN):       ('pemeliharaan.sql', 3, 'crm.alamat', 'R')
   terlewat (FN):       ('pemeliharaan.sql', 3, 'crm.pelanggan', 'R')
   terlewat (FN):       ('pemeliharaan.sql', 8, 'crm.pelanggan', 'U')

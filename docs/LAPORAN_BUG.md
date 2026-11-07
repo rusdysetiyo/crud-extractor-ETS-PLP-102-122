@@ -139,7 +139,7 @@ Kode lama pada fungsi `_insert` di `crud/parser.py` hanya mengimplementasikan ca
 
 ## Bug 5: Operator Perbandingan <> Terpecah Menjadi Dua Token di Lexer
 
-**Ditemukan oleh:** Rusdya Setiyo Aji · **Diperbaiki oleh:** (nama)
+**Ditemukan oleh:** Rusdya Setiyo Aji · **Diperbaiki oleh:** Gharin Fawwaz
 
 **Gejala.** Input query SQL yang menggunakan operator perbandingan tidak sama dengan `<>` menghasilkan error sintaks pada parser: `ParseError: Baris X, kolom Y: diharapkan ekspresi, ditemukan '>'`.
 Output yang diharapkan menurut SPESIFIKASI.md bagian 2.5 adalah operator `<>` dikenali sebagai satu token utuh bertipe `OP` dengan nilai `"<>"`, bukan dua token terpisah (`<` lalu `>`)
@@ -164,7 +164,7 @@ Pada fungsi `_scan_token` di `crud/lexer.py`, saat karakter `<` ditemukan, kode 
 
 ## Bug 6: Operasi Tabel Subquery pada Statement UPDATE Salah Ditandai sebagai 'U'
 
-**Ditemukan oleh:** Rusdya Setiyo Aji · **Diperbaiki oleh:** (nama)
+**Ditemukan oleh:** Rusdya Setiyo Aji · **Diperbaiki oleh:** Gharin Fawwaz
 
 **Gejala.** Input statement `UPDATE` yang memuat subquery pada klausa `SET` maupun klausa `WHERE` menyebabkan tabel di dalam subquery salah dicatat sebagai operasi `U`.
 Output yang diharapkan menurut SPESIFIKASI.md bagian 5 (Tabel aturan CRUD) adalah: tabel target `UPDATE` bertipe `U`, sedangkan membaca tabel lewat subquery **selalu R**, apa pun jenis statement luarnya.
@@ -191,7 +191,7 @@ Fungsi `_collect` bertugas mengumpulkan tabel di dalam subquery dan menandainya 
 
 ## Bug 7: Scope Statement DELETE Tidak Di-pop
 
-**Ditemukan oleh:** Rusdya Setiyo Aji **Diperbaiki oleh:**  
+**Ditemukan oleh:** Rusdya Setiyo Aji **Diperbaiki oleh:**  Gharin Fawwaz
 
 **Gejala.** Ketika file SQL berisi statement `DELETE` dengan alias (misalnya `DELETE FROM pelanggan p`), lalu diikuti statement lain yang merujuk alias `p` padahal alias tersebut tidak dideklarasikan di statement kedua, resolver tidak melaporkan error dan malah berhasil meresolve alias tersebut ke tabel milik `DELETE`. Selain itu, setelah script selesai di-resolve, atribut `resolver.scope` masih menyisakan objek `Scope` (tidak kembali `None`).
 Output yang diharapkan menurut SPESIFIKASI.md bagian 4.5 (*"Setiap statement berdiri sendiri. Setelah satu statement selesai di-resolve, tidak boleh ada scope tersisa. Alias dari statement sebelumnya tidak boleh terlihat oleh statement berikutnya."*) adalah: statement kedua wajib menghasilkan diagnostik error `alias 'p' tidak terdefinisi` dan `resolver.scope` harus bernilai `None`.
