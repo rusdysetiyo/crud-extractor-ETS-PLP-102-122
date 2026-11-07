@@ -153,7 +153,7 @@ SELECT id FROM t WHERE x <> 1;
 **Akar masalah.** 
 Pada fungsi `_scan_token` di `crud/lexer.py`, saat karakter `<` ditemukan, kode hanya mengecek apakah karakter berikutnya adalah `=` menggunakan `self._match("=")` untuk membentuk token `<=`. Kode belum memeriksa kemungkinan karakter `>`, sehingga ketika karakter berikutnya adalah `>`, lexer menganggap `<` telah selesai sebagai satu token `OP`, lalu di iterasi berikutnya membaca `>` sebagai token `OP` terpisah. Akibatnya, parser menerima dua token operator perbandingan berturut-turut (`<` lalu `>`) yang mana tidak sesuai SPESIFIKASI.md
 
-**Perbaikan.**
+**Perbaikan.**Pada file crud/lexer.py di dalam fungsi _scan_token(), perbaikan dilakukan dengan menambahkan kondisi elif self._match(">"): di dalam blok percabangan untuk karakter <. Di dalam blok tersebut, variabel op diatur menjadi "<>". Perubahan ini membuat lexer mampu memeriksa dan menangkap karakter > tepat setelah <, menjadikannya satu token OP yang utuh sehingga tidak terpecah menjadi dua token terpisah.
 
 **Test regresi.**
 - `test_regresi_operator_tidak_sama_dengan` (di `tests/test_tambahan.py`)
@@ -180,7 +180,7 @@ Pada fungsi `analyze_statement` di `crud/analyzer.py`, penanganan `ast.Update` m
 `_collect(assignment.value, usage, "U")` dan `_collect(stmt.where, usage, "U")`.
 Fungsi `_collect` bertugas mengumpulkan tabel di dalam subquery dan menandainya dengan operasi yang dioperkan. Karena dioperkan `"U"`, tabel-tabel di dalam subquery yang read-only keliru ditandai sebagai termodifikasi (`"U"`).
 
-**Perbaikan.**
+**Perbaikan.**Pada file crud/analyzer.py di dalam fungsi analyze_statement(), parameter operasi yang dilewatkan ke fungsi pembantu _collect diubah. Untuk penanganan percabangan ast.Update, pemanggilan fungsi untuk assignment.value maupun stmt.where yang semula dioper dengan "U" telah diganti menjadi "R". Perubahan ini memastikan bahwa semua tabel yang dibaca dari subquery pada statement UPDATE dianalisis dengan tepat sebagai operasi baca atau R.
 
 **Test regresi.**
 - `test_regresi_update_subquery_selalu_read` (di `tests/test_tambahan.py`)
@@ -207,7 +207,7 @@ SELECT p.nama FROM pesanan o;
 Pada file `crud/resolver.py`, fungsi `_delete` memanggil `self._push()` di awal untuk mendaftarkan tabel dan alias target `DELETE`, namun tidak memanggil `self._pop()` di akhir fungsi. 
 
 
-**Perbaikan.**
+**Perbaikan.**Pada file crud/resolver.py, perbaikan dilakukan dengan menambahkan satu baris kode pemanggilan metode self._pop() di akhir fungsi _delete(). Perbaikan ini akan memastikan scope atau lingkungan yang dibuat pada saat pembacaan statement DELETE lewat self._push() dihapus saat statement tersebut selesai di-resolve, mencegah kebocoran scope ke statement SQL selanjutnya.
 
 **Test regresi.**
 - `test_regresi_scope_delete_tidak_bocor` (di `tests/test_tambahan.py`)
