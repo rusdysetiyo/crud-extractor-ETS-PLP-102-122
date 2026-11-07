@@ -145,3 +145,37 @@ def test_regresi_panic_mode_error_recovery():
     # 2. Statement valid setelahnya tetap diproses (tidak boleh terbuang)
     assert len(script.statements) == 1
     assert script.statements[0].sources[0].name == "pelanggan"
+
+
+def test_regresi_presedensi_and_lebih_tinggi_dari_or():
+    # SPESIFIKASI 3.1: Presedensi operator logika.
+    # 'AND' (tingkat 2) memiliki presedensi lebih tinggi daripada 'OR' (tingkat 1).
+    # 'a = 1 OR b = 2 AND c = 3' harus berarti 'a = 1 OR (b = 2 AND c = 3)'.
+    sql = "SELECT id FROM t WHERE a = 1 OR b = 2 AND c = 3;"
+    script = parse_sql(sql)
+    assert script.errors == []
+    where = script.statements[0].where
+
+    # Root operator harus 'OR', dan sisi kanannya mengelompokkan operasi 'AND'
+    assert isinstance(where, ast.BinaryOp)
+    assert where.op == "OR"
+    assert isinstance(where.right, ast.BinaryOp)
+    assert where.right.op == "AND"
+
+
+def test_kasus_tepi_presedensi_between_and_dengan_or():
+    # Kasus tepi SPESIFIKASI 3.1 & 3.2:
+    # 'AND' di dalam 'BETWEEN a AND b' adalah bagian dari BETWEEN, bukan operator logika biner.
+    # Ekspresi 'x BETWEEN 1 AND 10 OR y = 5' tidak boleh salah memecah 'AND' milik BETWEEN.
+    sql = "SELECT id FROM t WHERE x BETWEEN 1 AND 10 OR y = 5;"
+    script = parse_sql(sql)
+    assert script.errors == []
+    where = script.statements[0].where
+
+    # Root operator adalah 'OR', dengan sisi kiri berupa node Between yang utuh
+    assert isinstance(where, ast.BinaryOp)
+    assert where.op == "OR"
+    assert isinstance(where.left, ast.Between)
+    assert where.left.low.value == "1"
+    assert where.left.high.value == "10"
+
