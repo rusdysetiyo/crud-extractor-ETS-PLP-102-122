@@ -80,7 +80,7 @@ ya, AI membantu merumuskan logika percabangan untuk pengecekan entri pada scope 
 
 ## Bug 3: Komentar Blok (/* ... */) Belum Didukung di Lexer
 
-**Ditemukan oleh:** (nama) · **Diperbaiki oleh:** (nama)
+**Diperbaiki oleh:** Rusdya Setiyo Aji
 
 **Gejala.** Input kueri SQL yang memuat komentar blok `/* ... */` menghasilkan error leksikal `LexError: Baris X, kolom Y: komentar blok belum didukung`. 
 Output yang diharapkan menurut SPESIFIKASI.md bagian 2.3 adalah komentar blok diabaikan dan tidak menghasilkan token sama sekali, 
@@ -111,7 +111,7 @@ serta melempar `LexError("komentar blok tidak ditutup", line, col)` jika mencapa
 
 ## Bug 4: Sintaks INSERT INTO ... SELECT Belum Didukung di Parser
 
-**Ditemukan oleh:** (nama) · **Diperbaiki oleh:** (nama)
+**Diperbaiki oleh:** Rusdya Setiyo Aji
 
 **Gejala.** Input kueri SQL berupa `INSERT INTO ... SELECT ...` menghasilkan error sintaks `ParseError: Baris X, kolom Y: INSERT ... SELECT belum didukung, ditemukan 'SELECT'`. Output yang diharapkan menurut SPESIFIKASI.md bagian 3 dan bagian 5 adalah kueri berhasil di-parse ke dalam node `ast.Insert` dengan subquery `query` yang valid, serta diekstrak matriks CRUD-nya dengan tabel target bertipe `C` dan tabel sumber `SELECT` bertipe `R`.
 
@@ -134,3 +134,83 @@ Kode lama pada fungsi `_insert` di `crud/parser.py` hanya mengimplementasikan ca
 - `test_insert_select` (di `tests/test_parser.py`)
 
 **Peran AI.** (Isikan peran AI di sini)
+
+---
+
+## Bug 5: Operator Perbandingan <> Terpecah Menjadi Dua Token di Lexer
+
+**Ditemukan oleh:** Rusdya Setiyo Aji · **Diperbaiki oleh:** (nama)
+
+**Gejala.** Input query SQL yang menggunakan operator perbandingan tidak sama dengan `<>` menghasilkan error sintaks pada parser: `ParseError: Baris X, kolom Y: diharapkan ekspresi, ditemukan '>'`.
+Output yang diharapkan menurut SPESIFIKASI.md bagian 2.5 adalah operator `<>` dikenali sebagai satu token utuh bertipe `OP` dengan nilai `"<>"`, bukan dua token terpisah (`<` lalu `>`)
+
+**Reproduksi minimal.**
+
+```sql
+SELECT id FROM t WHERE x <> 1;
+```
+
+**Akar masalah.** 
+Pada fungsi `_scan_token` di `crud/lexer.py`, saat karakter `<` ditemukan, kode hanya mengecek apakah karakter berikutnya adalah `=` menggunakan `self._match("=")` untuk membentuk token `<=`. Kode belum memeriksa kemungkinan karakter `>`, sehingga ketika karakter berikutnya adalah `>`, lexer menganggap `<` telah selesai sebagai satu token `OP`, lalu di iterasi berikutnya membaca `>` sebagai token `OP` terpisah. Akibatnya, parser menerima dua token operator perbandingan berturut-turut (`<` lalu `>`) yang mana tidak sesuai SPESIFIKASI.md
+
+**Perbaikan.**
+
+**Test regresi.**
+- `test_regresi_operator_tidak_sama_dengan` (di `tests/test_tambahan.py`)
+
+**Peran AI.**
+
+---
+
+## Bug 6: Operasi Tabel Subquery pada Statement UPDATE Salah Ditandai sebagai 'U'
+
+**Ditemukan oleh:** Rusdya Setiyo Aji · **Diperbaiki oleh:** (nama)
+
+**Gejala.** Input statement `UPDATE` yang memuat subquery pada klausa `SET` maupun klausa `WHERE` menyebabkan tabel di dalam subquery salah dicatat sebagai operasi `U`.
+Output yang diharapkan menurut SPESIFIKASI.md bagian 5 (Tabel aturan CRUD) adalah: tabel target `UPDATE` bertipe `U`, sedangkan membaca tabel lewat subquery **selalu R**, apa pun jenis statement luarnya.
+
+**Reproduksi minimal.**
+
+```sql
+UPDATE pelanggan SET level = 'gold' WHERE id IN (SELECT pelanggan_id FROM pesanan);
+```
+
+**Akar masalah.**
+Pada fungsi `analyze_statement` di `crud/analyzer.py`, penanganan `ast.Update` memanggil helper `_collect` untuk ekspresi nilai `SET` dan kondisi `WHERE` dengan mengoper parameter operasi `"U"`:
+`_collect(assignment.value, usage, "U")` dan `_collect(stmt.where, usage, "U")`.
+Fungsi `_collect` bertugas mengumpulkan tabel di dalam subquery dan menandainya dengan operasi yang dioperkan. Karena dioperkan `"U"`, tabel-tabel di dalam subquery yang read-only keliru ditandai sebagai termodifikasi (`"U"`).
+
+**Perbaikan.**
+
+**Test regresi.**
+- `test_regresi_update_subquery_selalu_read` (di `tests/test_tambahan.py`)
+
+**Peran AI.** (Isikan peran AI di sini)
+
+---
+
+## Bug 7: Scope Statement DELETE Tidak Di-pop
+
+**Ditemukan oleh:** Rusdya Setiyo Aji **Diperbaiki oleh:**  
+
+**Gejala.** Ketika file SQL berisi statement `DELETE` dengan alias (misalnya `DELETE FROM pelanggan p`), lalu diikuti statement lain yang merujuk alias `p` padahal alias tersebut tidak dideklarasikan di statement kedua, resolver tidak melaporkan error dan malah berhasil meresolve alias tersebut ke tabel milik `DELETE`. Selain itu, setelah script selesai di-resolve, atribut `resolver.scope` masih menyisakan objek `Scope` (tidak kembali `None`).
+Output yang diharapkan menurut SPESIFIKASI.md bagian 4.5 (*"Setiap statement berdiri sendiri. Setelah satu statement selesai di-resolve, tidak boleh ada scope tersisa. Alias dari statement sebelumnya tidak boleh terlihat oleh statement berikutnya."*) adalah: statement kedua wajib menghasilkan diagnostik error `alias 'p' tidak terdefinisi` dan `resolver.scope` harus bernilai `None`.
+
+**Reproduksi minimal.**
+
+```sql
+DELETE FROM pelanggan p WHERE p.id = 1;
+SELECT p.nama FROM pesanan o;
+```
+
+**Akar masalah.**
+Pada file `crud/resolver.py`, fungsi `_delete` memanggil `self._push()` di awal untuk mendaftarkan tabel dan alias target `DELETE`, namun tidak memanggil `self._pop()` di akhir fungsi. 
+
+
+**Perbaikan.**
+
+**Test regresi.**
+- `test_regresi_scope_delete_tidak_bocor` (di `tests/test_tambahan.py`)
+
+**Peran AI.**
+
