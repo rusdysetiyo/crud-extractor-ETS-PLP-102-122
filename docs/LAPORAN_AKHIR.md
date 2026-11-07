@@ -85,9 +85,47 @@ Minimal tiga hal yang **tidak bisa** ditangani dengan benar oleh tool ini meskip
 sudah diperbaiki. Untuk tiap batas: contoh SQL atau situasinya, akibatnya pada CRUD matrix,
 dan informasi apa yang dibutuhkan untuk mengatasinya.
 
-1.
-2.
-3.
+1. **Ketiadaan Skema Database untuk Resolusi Kolom Ambigu (*No Schema Catalog*)**
+   - **Contoh SQL / Situasi:**
+     ```sql
+     SELECT nama, total
+     FROM pelanggan, pesanan
+     WHERE pelanggan.id = pesanan.pelanggan_id;
+     ```
+   - **Akibat pada CRUD matrix:**
+     Sesuai batasan arsitektur (SPESIFIKASI.md bagian 7 poin 4), tool ini bekerja murni dari teks query tanpa koneksi ke database maupun definisi skema tabel. Akibatnya, ketika ada kolom tanpa qualifier (`nama`, `total`) pada kueri yang melibatkan lebih dari satu tabel, resolver tidak dapat mengetahui kolom mana yang menjadi milik tabel mana. Atribut `resolved` pada kolom tersebut tetap `None` (hanya menghasilkan warning). Pada analisis penggunaan kolom (`--kolom`), relasi tabel-ke-kolom menjadi hilang atau tidak tercatat.
+   - **Informasi yang dibutuhkan untuk mengatasinya:**
+     Dibutuhkan **katalog skema database** yang memetakan setiap tabel fisik ke daftar kolom yang dimilikinya misalnya `pelanggan` memiliki kolom `[id, nama]` dan `pesanan` memiliki `[id, pelanggan_id, total]`, sehingga resolver dapat mencocokkan kolom tanpa qualifier ke tabel pemiliknya secara pasti.
+
+2. **Abstraksi View Database, Stored Procedure, dan Trigger**
+   - **Contoh SQL / Situasi:**
+     ```sql
+     SELECT * FROM v_laporan_keuangan;
+     ```
+     Di mana `v_laporan_keuangan` di database adalah sebuah *View* yang dibentuk dari:
+     ```sql
+     CREATE VIEW v_laporan_keuangan AS
+     SELECT p.nama, t.nominal FROM pelanggan p JOIN transaksi t ON p.id = t.pelanggan_id;
+     ```
+   - **Akibat pada CRUD matrix:**
+     Tool hanya mencatat operasi `R` pada nama objek `v_laporan_keuangan`. Tool sama sekali tidak mendeteksi bahwa tabel yang sesungguhnya diakses adalah tabel `pelanggan` dan `transaksi`. Akibatnya, matriks CRUD kehilangan operasi baca pada tabel-tabel fisik tersebut. Hal serupa terjadi pada `INSERT` atau `UPDATE` yang memicu *Trigger* atau prosedur tersimpan di database.
+   - **Informasi yang dibutuhkan untuk mengatasinya:**
+     Dibutuhkan definisi DDL dari seluruh view (*view definition*) dan trigger di database agar analyzer dapat melakukan ekspansi view (*view inlining/expansion*) ke dalam AST sebelum tahap analisis CRUD dilakukan.
+
+3. **Konstruksi SQL Lanjutan di Luar Lingkup Grammar**
+   - **Contoh SQL / Situasi:**
+     ```sql
+     WITH ringkasan AS (
+         SELECT pelanggan_id, SUM(total) AS omzet FROM pesanan GROUP BY pelanggan_id
+     )
+     UPDATE pelanggan SET level = 'VIP'
+     WHERE id IN (SELECT pelanggan_id FROM ringkasan WHERE omzet > 1000000);
+     ```
+   - **Akibat pada CRUD matrix:**
+     Sintaks CTE (`WITH ... AS (...)`), `UNION`, dan `MERGE` berada di luar lingkup grammar parser yang didukung (SPESIFIKASI.md bagian 9). Saat kueri semacam ini dimasukkan, parser akan melempar `ParseError` karena tidak mengenali keyword pembuka `WITH`. Karena aturan spesifikasi menyatakan statement yang gagal di-parse tidak dihitung, seluruh operasi penting pada kueri tersebut (operasi `U` pada `pelanggan` dan `R` pada `pesanan`) diabaikan
+   - **Informasi yang dibutuhkan untuk mengatasinya:**
+     Dibutuhkan perluasan grammar pada parser recursive descent agar mampu mem-parse klausa `WITH`, serta penyesuaian pada resolver untuk menangani scope tabel semu sebelum tabel target dianalisis oleh analyzer.
+
 
 ## 4. Pembagian kerja
 
