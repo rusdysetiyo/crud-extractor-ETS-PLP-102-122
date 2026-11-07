@@ -88,10 +88,11 @@ class Parser:
         return ast.Script(statements, errors)
 
     def _synchronize(self) -> None:
-        # Panic mode (Crafting Interpreters bab 6): buang token sampai
-        # titik aman, lalu lanjutkan parsing.
+        # Panic mode (SPESIFIKASI.md bagian 6): buang token sampai
+        # dan termasuk ';' berikutnya, lalu lanjutkan dengan statement setelahnya.
         while not self._at_end():
-            self._advance()
+            if self._advance().type == T.SEMICOLON:
+                return
 
     def _statement(self):
         if self._check_kw("SELECT"):
