@@ -249,4 +249,31 @@ def _synchronize(self) -> None:
 
 **Peran AI.** Membantu membuatkan test dengan skenario yang ditentukan
 
+---
+
+## Bug 9: Presedensi Operator Logika AND dan OR Dianggap Setara di Parser
+
+**Ditemukan oleh:** Rusdya Setiyo Aji · **Diperbaiki oleh:** (nama)
+
+**Gejala.** Ekspresi logika campuran `AND` dan `OR` tanpa tanda kurung (seperti `a = 1 OR b = 2 AND c = 3`) dievaluasi secara dari kiri ke kanan, sehingga menghasilkan struktur `(a = 1 OR b = 2) AND c = 3`.
+Output yang diharapkan menurut SPESIFIKASI.md bagian 3 dan 3.1 adalah operator `AND` memiliki tingkat presedensi lebih tinggi (tingkat 2) dibandingkan `OR` (tingkat 1), sehingga ekspresi harus dikelompokkan menjadi `a = 1 OR (b = 2 AND c = 3)`
+
+**Reproduksi minimal.**
+
+```sql
+SELECT id FROM t WHERE a = 1 OR b = 2 AND c = 3;
+```
+
+**Akar masalah.**
+Pada fungsi `_logical` di `crud/parser.py`, parser menggabungkan pengecekan `AND` dan `OR` ke dalam satu perulangan `while self._check_kw("AND", "OR"):` yang sama. Akibatnya, kedua operator diperlakukan memiliki tingkatan presedensi yang sama secara asosiatif kiri (*flat precedence*), menyalahi aturan grammar pada SPESIFIKASI.md bagian 3 (`or_expr = and_expr { "OR" and_expr }` dan `and_expr = not_expr { "AND" not_expr }`).
+
+**Perbaikan.**
+
+**Test regresi.**
+- `test_regresi_presedensi_and_lebih_tinggi_dari_or` (di `tests/test_tambahan.py`)
+- `test_kasus_tepi_presedensi_between_and_dengan_or` (di `tests/test_tambahan.py`)
+
+**Peran AI.** Membantu membuatkan test dengan skenario yang ditentukan
+
+
 
