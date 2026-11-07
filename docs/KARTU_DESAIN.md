@@ -1,19 +1,12 @@
 # Kartu Desain
 
 Tuliskan lima keputusan desain penting dalam pekerjaan kalian. Untuk tiap keputusan, sebutkan
-alternatif yang ditolak dan alasannya. Contoh topik (boleh memilih yang lain):
-
-- bagaimana parser membedakan `*` sebagai "semua kolom" dan sebagai perkalian;
-- di mana dan bagaimana presedensi `AND`/`OR` dinyatakan;
-- mengapa error recovery berhenti di `;`, bukan di keyword `SELECT` berikutnya;
-- urutan pencarian scope dan akibatnya pada shadowing serta correlated subquery;
-- mengapa kolom tanpa qualifier hanya dilihat di scope terdalam, dan apa kelemahannya;
-- bagaimana implementasi `INSERT ... SELECT` atau komentar blok kalian.
+alternatif yang ditolak dan alasannya.
 
 | No | Keputusan | Alternatif yang ditolak | Alasan |
-| --- | --- | --- | --- |
-| 1 | | | |
-| 2 | | | |
-| 3 | | | |
-| 4 | | | |
-| 5 | | | |
+| :---: | :--- | :--- | :--- |
+| 1 | Saat ada error sintaks, parser membuang token sampai tanda titik koma (`;`), lalu lanjut memproses statement berikutnya. | Mencari kata kunci awal query berikutnya (seperti `SELECT`), atau membuang semua token sampai akhir file (`EOF`). | Tanda `;` adalah pemisah query yang paling jelas di SQL. Jika mencari kata `SELECT`, parser bisa salah mengira subquery di dalam query yang rusak sebagai query baru. Jika membuang sampai `EOF`, query-query yang benar setelahnya malah ikut terbuang. |
+| 2 | Komentar blok (`/* ... */`) langsung dibaca dan dibuang di lexer tanpa menghasilkan token apa pun. | Mengirim token komentar ke parser, atau menghapus komentar memakai regex sebelum lexing. | Mengirim token komentar akan membuat aturan grammar parser jadi rumit karena harus mengecek komentar di mana-mana. Menghapus komentar dengan regex sebelum lexing juga buruk karena merusak hitungan nomor baris dan kolom pesan error. |
+| 3 | Mendukung `INSERT ... SELECT` dengan mengisi atribut `query` pada node `ast.Insert` yang sudah ada, serta mengosongkan `values`. | Membuat jenis node AST baru (misal `InsertSelect`) atau memasukkan query `SELECT` secara paksa ke dalam `values`. | Struktur kelas AST tidak boleh diubah karena sudah ditentukan oleh spesifikasi penilaian. Modul resolver dan analyzer di tahap berikutnya juga sudah siap menerima `query` jika isinya bukan `None`. |
+| 4 | Kolom tanpa nama tabel (tanpa qualifier) hanya dicari pada tabel di scope kueri paling dalam. | Mencari kolom sampai ke kueri luar (*parent scope*), atau menebak salah satu tabel jika ada lebih dari satu tabel. | Mencari ke kueri luar berisiko salah menyambungkan kolom ke tabel luar. Menebak tabel saat ada beberapa tabel juga bahaya karena bisa menghasilkan data CRUD yang salah. Lebih aman membiarkannya kosong dan memunculkan peringatan (*warning*). |
+| 5 | Pencarian nama alias tabel dilakukan mulai dari scope terdalam, lalu perlahan naik ke scope terluar. | Mencari dari scope terluar ke terdalam (seperti bug lama), atau hanya mencari di scope saat ini saja. | Agar jika subquery memakai nama alias yang sama dengan kueri luar, alias di subquery yang akan dipakai (*shadowing*). Selain itu, subquery tetap bisa membaca alias milik kueri luar jika namanya berbeda (*correlated subquery*). |
