@@ -158,7 +158,7 @@ Pada fungsi `_scan_token` di `crud/lexer.py`, saat karakter `<` ditemukan, kode 
 **Test regresi.**
 - `test_regresi_operator_tidak_sama_dengan` (di `tests/test_tambahan.py`)
 
-**Peran AI.** 
+**Peran AI.**  Membantu membuatkan test secara keseluruhhan dan membantu memperbaiki bug.
 
 ---
 
@@ -185,7 +185,7 @@ Fungsi `_collect` bertugas mengumpulkan tabel di dalam subquery dan menandainya 
 **Test regresi.**
 - `test_regresi_update_subquery_selalu_read` (di `tests/test_tambahan.py`)
 
-**Peran AI.**  Membantu membuatkan test secara keseluruhhan
+**Peran AI.**  Membantu membuatkan test secara keseluruhhan dan membantu memperbaiki bug.
 
 ---
 
@@ -212,7 +212,7 @@ Pada file `crud/resolver.py`, fungsi `_delete` memanggil `self._push()` di awal 
 **Test regresi.**
 - `test_regresi_scope_delete_tidak_bocor` (di `tests/test_tambahan.py`)
 
-**Peran AI.**  Membantu membuatkan test secara keseluruhan
+**Peran AI.**  Membantu membuatkan test secara keseluruhan dan membantu memperbaiki bug.
 
 ---
 
@@ -253,7 +253,7 @@ def _synchronize(self) -> None:
 
 ## Bug 9: Presedensi Operator Logika AND dan OR Dianggap Setara di Parser
 
-**Ditemukan oleh:** Rusdya Setiyo Aji · **Diperbaiki oleh:** (nama)
+**Ditemukan oleh:** Rusdya Setiyo Aji · **Diperbaiki oleh:** Gharin Fawwaz
 
 **Gejala.** Ekspresi logika campuran `AND` dan `OR` tanpa tanda kurung (seperti `a = 1 OR b = 2 AND c = 3`) dievaluasi secara dari kiri ke kanan, sehingga menghasilkan struktur `(a = 1 OR b = 2) AND c = 3`.
 Output yang diharapkan menurut SPESIFIKASI.md bagian 3 dan 3.1 adalah operator `AND` memiliki tingkat presedensi lebih tinggi (tingkat 2) dibandingkan `OR` (tingkat 1), sehingga ekspresi harus dikelompokkan menjadi `a = 1 OR (b = 2 AND c = 3)`
@@ -267,13 +267,13 @@ SELECT id FROM t WHERE a = 1 OR b = 2 AND c = 3;
 **Akar masalah.**
 Pada fungsi `_logical` di `crud/parser.py`, parser menggabungkan pengecekan `AND` dan `OR` ke dalam satu perulangan `while self._check_kw("AND", "OR"):` yang sama. Akibatnya, kedua operator diperlakukan memiliki tingkatan presedensi yang sama secara asosiatif kiri (*flat precedence*), menyalahi aturan grammar pada SPESIFIKASI.md bagian 3 (`or_expr = and_expr { "OR" and_expr }` dan `and_expr = not_expr { "AND" not_expr }`).
 
-**Perbaikan.**
+**Perbaikan.**Pada `crud/parser.py`, fungsi `_logical` dihapus dan diganti dua fungsi berjenjang, `_or_expr` dan `_and_expr`. `_expr` memanggil `_or_expr`; `_or_expr` memanggil `_and_expr` dan mengulang selama menemukan `OR`; `_and_expr` memanggil `_not` dan mengulang selama menemukan `AND`; `_not` kemudian memanggil `_comparison`. Dengan begitu `AND` diikat lebih dulu (lebih dalam di pohon) sebelum `OR` mengikat hasilnya di lapisan luar, dan keduanya tetap asosiatif kiri. Alternatif yang dipertimbangkan: (a) satu fungsi dengan tabel presedensi (*precedence climbing*), ditolak karena grammar spesifikasi sudah disusun per tingkat dan fungsi lain di file ini juga mengikuti pola satu fungsi per tingkat; (b) mempertahankan satu fungsi `_logical` lalu menyusun ulang pohon sesudahnya, ditolak karena rapuh dan tidak mengikuti grammar.
 
 **Test regresi.**
 - `test_regresi_presedensi_and_lebih_tinggi_dari_or` (di `tests/test_tambahan.py`)
 - `test_kasus_tepi_presedensi_between_and_dengan_or` (di `tests/test_tambahan.py`)
 
-**Peran AI.** Membantu membuatkan test dengan skenario yang ditentukan
+**Peran AI.** Membantu membuatkan test dengan skenario yang ditentukan dan membantu memperbaiki bug.
 
 
 
